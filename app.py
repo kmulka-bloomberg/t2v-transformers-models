@@ -1,9 +1,10 @@
 import os
+import asyncio
 from logging import getLogger
 from fastapi import FastAPI, Response, status
 from vectorizer import Vectorizer, VectorInput
 from meta import Meta
-
+from concurrent.futures import ProcessPoolExecutor
 
 app = FastAPI()
 vec : Vectorizer
@@ -11,8 +12,8 @@ meta_config : Meta
 logger = getLogger('uvicorn')
 
 
-@app.on_event("startup")
-def startup_event():
+
+def initializer_worker():
     global vec
     global meta_config
 
@@ -33,6 +34,12 @@ def startup_event():
     vec = Vectorizer('./models/model', cuda_support, cuda_core,
                      meta_config.getModelType(), meta_config.get_architecture())
 
+@app.on_event("startup")
+def startup_event():
+    global executor
+    initializer_worker()
+    executor = ProcessPoolExecutor(initializer=initializer_worker)
+
 
 @app.get("/.well-known/live", response_class=Response)
 @app.get("/.well-known/ready", response_class=Response)
@@ -45,10 +52,17 @@ def meta():
     return meta_config.get()
 
 
+def vectorize(item):
+    async def inner(item):
+        vector = await vec.vectorize(item.text, item.config)
+        return vector
+    return asyncio.run(inner(item))
+
 @app.post("/vectors/")
 async def read_item(item: VectorInput, response: Response):
     try:
-        vector = await vec.vectorize(item.text, item.config)
+        loop = asyncio.get_running_loop()
+        vector = await loop.run_in_executor(executor, vectorize, item)
         return {"text": item.text, "vector": vector.tolist(), "dim": len(vector)}
     except Exception as e:
         logger.exception(
