@@ -58,6 +58,7 @@ def vectorize(item):
         return vector
     return asyncio.run(inner(item))
 
+@app.post("/vectors")
 @app.post("/vectors/")
 async def read_item(item: VectorInput, response: Response):
     try:
