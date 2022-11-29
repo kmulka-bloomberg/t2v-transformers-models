@@ -5,6 +5,7 @@ from fastapi import FastAPI, Response, status
 from vectorizer import Vectorizer, VectorInput
 from meta import Meta
 from concurrent.futures import ProcessPoolExecutor
+import multiprocessing
 
 app = FastAPI()
 vec : Vectorizer
@@ -37,6 +38,8 @@ def initializer_worker():
 @app.on_event("startup")
 def startup_event():
     global executor
+
+    multiprocessing.set_start_method('spawn')
     initializer_worker()
     executor = ProcessPoolExecutor(initializer=initializer_worker)
 
